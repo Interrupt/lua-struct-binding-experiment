@@ -1,0 +1,21 @@
+.{
+    .name = .delve_framework_example,
+    .version = "0.0.1",
+    .minimum_zig_version = "0.15.2",
+    .fingerprint = 0xcbc471bef4d916a5,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        //"README.md",
+    },
+    .dependencies = .{
+        .delve = .{
+            .path = "../delve-framework/",
+            // .url = "git+https://github.com/Interrupt/delve-framework.git#e43d190459bcbe9bca80240abdcc178ece03945c",
+            // .hash = "delve-0.0.3-GCqrxny7hAJUFFPNfb53zUZtfoSDkUMTSAefqy7xVUcy",
+        },
+    },
+}
