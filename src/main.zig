@@ -13,6 +13,8 @@ const luaTypeBinder = @import("luatypebinder.zig");
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
+const TestStructTwo = struct {};
+
 const MyTestStruct = struct {
     val: i32,
 
@@ -44,12 +46,24 @@ const MyTestStruct = struct {
     pub fn copy(self: *MyTestStruct) MyTestStruct {
         return self.*;
     }
+
+    pub fn getTitle(self: *MyTestStruct) Title {
+        _ = self;
+        return .{ .title = "This is a new Title, returned from MyTestStruct!" };
+    }
+
+    pub fn getString(self: *MyTestStruct) [:0]const u8 {
+        _ = self;
+        return "Hello World String";
+    }
 };
 
 const Title = struct {
+    title: [:0]const u8,
+
     pub fn init() Title {
         delve.debug.log("Title init!", .{});
-        return Title{};
+        return Title{ .title = "This is a title from Lua!" };
     }
 
     pub fn destroy(self: *Title) void {
@@ -58,8 +72,7 @@ const Title = struct {
     }
 
     pub fn getTitle(self: *Title) [:0]const u8 {
-        _ = self;
-        return "This is from the Title struct! Hello!";
+        return self.title;
     }
 };
 
@@ -95,9 +108,12 @@ pub fn on_init() !void {
     // Manually interact with Lua
     const lua_state = lua.getLua();
 
-    // register our types!
-    try luaTypeBinder.bindType(lua_state, MyTestStruct, "MyTestStruct");
-    try luaTypeBinder.bindType(lua_state, Title, "Title");
+    const luaTypeRegistry = luaTypeBinder.Registry(&[_]luaTypeBinder.BoundType{
+        .{ .T = MyTestStruct, .name = "MyTestStruct" },
+        .{ .T = Title, .name = "Title" },
+    });
+
+    try luaTypeRegistry.bindTypes(lua_state);
 
     // Manually run the lua file
     // lua_state.doFile("assets/main.lua") catch |err| {

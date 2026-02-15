@@ -29,8 +29,11 @@ local objTwo = testUserdata.new()
 objTwo:set(50)
 
 local title = titleType.new()
+title = objOne:getTitle()
 
 objOne:add(objTwo)
+
+print(objOne:getString())
 
 print(objOne:getVal())
 
