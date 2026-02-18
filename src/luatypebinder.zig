@@ -41,26 +41,7 @@ pub fn Registry(comptime entries: []const BoundType) type {
         pub fn bindType(luaState: *zlua.Lua, comptime T: type, comptime metaTableName: [:0]const u8) !void {
             delve.debug.log("Registering user type: {s}", .{metaTableName});
 
-            // Make our new and __gc funcs
-            const newFunc = struct {
-                fn inner(L: *zlua.Lua) i32 {
-                    delve.debug.log("LuaType new called", .{});
-
-                    // make a new ptr
-                    const ptr: *T = @alignCast(L.newUserdata(T, @sizeOf(T)));
-
-                    // set its metatable
-                    _ = L.getMetatableRegistry(metaTableName);
-                    _ = L.setMetatable(-2);
-
-                    // init new object, copy values to our pointer
-                    const res = T.init();
-                    ptr.* = res;
-
-                    return 1;
-                }
-            }.inner;
-
+            // Make our GC function to wire to _gc in lua
             const gcFunc = struct {
                 fn inner(L: *zlua.Lua) i32 {
                     const ptr = L.checkUserdata(T, 1, metaTableName);
@@ -83,23 +64,44 @@ pub fn Registry(comptime entries: []const BoundType) type {
             luaState.setField(-2, "__gc");
 
             // Now wire up our functions!
-            switch (@typeInfo(T)) {
-                .@"struct" => |S| {
-                    const decls = S.decls;
-                    inline for (decls) |decl| {
-                        if (@typeInfo(@TypeOf(@field(T, decl.name))) == .@"fn") {
-                            luaState.pushClosure(zlua.wrap(bindStructFuncLua(@field(T, decl.name))), 0);
-                            luaState.setField(-2, decl.name);
-                        }
-                    }
-                },
-                else => {},
+            const foundFns = comptime findLibraryFunctions(T);
+            inline for (foundFns) |foundFunc| {
+                luaState.pushClosure(foundFunc.func.?, 0);
+                luaState.setField(-2, foundFunc.name);
             }
 
-            // Make this usable with "require" and register the 'new' func
-            luaState.requireF(metaTableName, zlua.wrap(makeLuaOpenLibFn(newFunc)), true);
+            // Make this usable with "require" and register our funcs in the library
+            luaState.requireF(metaTableName, zlua.wrap(makeLuaOpenLibFn(foundFns)), true);
 
             delve.debug.log("Added lua module: '{s}'", .{metaTableName});
+        }
+
+        fn makeLuaBinding(name: [:0]const u8, comptime function: anytype) zlua.FnReg {
+            return zlua.FnReg{ .name = name, .func = zlua.wrap(bindStructFuncLua(function)) };
+        }
+
+        fn findLibraryFunctions(comptime module: anytype) []const zlua.FnReg {
+            comptime {
+                // Get all the public declarations in this module
+                const decls = @typeInfo(module).@"struct".decls;
+                // filter out only the public functions
+                var gen_fields: []const std.builtin.Type.Declaration = &[_]std.builtin.Type.Declaration{};
+                for (decls) |d| {
+                    if (@typeInfo(@TypeOf(@field(module, d.name))) == .@"fn") {
+                        gen_fields = gen_fields ++ .{d};
+                    }
+                }
+
+                var found: []const zlua.FnReg = &[_]zlua.FnReg{};
+                for (gen_fields) |d| {
+                    // convert the name string to be :0 terminated
+                    const field_name: [:0]const u8 = d.name ++ "";
+                    found = found ++ .{makeLuaBinding(field_name, @field(module, d.name))};
+
+                    // found = found ++ .{ .name = field_name, .func = zlua.wrap(@field(module, d.name)) };
+                }
+                return found;
+            }
         }
 
         fn bindStructFuncLua(comptime function: anytype) fn (lua: *Lua) i32 {
@@ -215,18 +217,27 @@ pub fn Registry(comptime entries: []const BoundType) type {
     };
 }
 
-fn makeLuaOpenLibFn(comptime newFunc: anytype) fn (*Lua) i32 {
+fn makeFuncRg(funcs: []zlua.CFn) []zlua.FnReg {
+    comptime {
+        const registry = [_]zlua.FnReg{};
+
+        for (funcs) |func| {
+            const newRegFn = zlua.FnReg{ .name = "new", .func = func };
+            registry ++ newRegFn;
+        }
+
+        return registry;
+    }
+}
+
+fn makeLuaOpenLibFn(libFuncs: []const zlua.FnReg) fn (*Lua) i32 {
     return opaque {
         pub fn inner(luaState: *Lua) i32 {
-            const newRegFn = zlua.FnReg{ .name = "new", .func = zlua.wrap(newFunc) };
-
             delve.debug.log("Lua require called!", .{});
 
-            var lib_funcs: [1]zlua.FnReg = undefined;
-            lib_funcs[0] = newRegFn;
+            // Register our new library for this type, with all our funcs!
+            luaState.newLib(libFuncs);
 
-            // Register our library, with a ".new()" function!
-            luaState.newLib(&lib_funcs);
             return 1;
         }
     }.inner;

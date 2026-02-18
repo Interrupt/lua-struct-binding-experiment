@@ -7,7 +7,7 @@ local titleType = require("Title")
 -- Exercise our test types!
 
 -- Create a new object from our userdata type
-local obj = testUserdata.new()
+local obj = testUserdata.init()
 
 -- Get the metatable back
 local mt = getmetatable(obj)
@@ -22,13 +22,13 @@ for key, value in pairs(mt) do
 	end
 end
 
-local objOne = testUserdata.new()
+local objOne = testUserdata.init()
 objOne:set(100)
 
-local objTwo = testUserdata.new()
+local objTwo = testUserdata.init()
 objTwo:set(50)
 
-local title = titleType.new()
+local title = titleType.init()
 title = objOne:getTitle()
 
 objOne:add(objTwo)
