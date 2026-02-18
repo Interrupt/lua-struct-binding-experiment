@@ -111,7 +111,7 @@ pub fn on_init() !void {
     const luaTypeRegistry = luaTypeBinder.Registry(&[_]luaTypeBinder.BoundType{
         .{ .T = MyTestStruct, .name = "MyTestStruct" },
         .{ .T = Title, .name = "Title" },
-        // .{ .T = delve.math.Vec3, .name = "Vec3" },
+        .{ .T = delve.math.Vec3, .name = "Vec3" },
     });
 
     try luaTypeRegistry.bindTypes(lua_state);

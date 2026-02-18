@@ -32,6 +32,10 @@ pub fn Registry(comptime entries: []const BoundType) type {
             return false;
         }
 
+        pub fn hasDestroyFunc(comptime T: type) bool {
+            return std.meta.hasFn(T, "destroy");
+        }
+
         pub fn bindTypes(luaState: *zlua.Lua) !void {
             inline for (registry) |entry| {
                 try bindType(luaState, entry.T, entry.name);
@@ -40,15 +44,6 @@ pub fn Registry(comptime entries: []const BoundType) type {
 
         pub fn bindType(luaState: *zlua.Lua, comptime T: type, comptime metaTableName: [:0]const u8) !void {
             delve.debug.log("Registering user type: {s}", .{metaTableName});
-
-            // Make our GC function to wire to _gc in lua
-            const gcFunc = struct {
-                fn inner(L: *zlua.Lua) i32 {
-                    const ptr = L.checkUserdata(T, 1, metaTableName);
-                    ptr.destroy();
-                    return 0;
-                }
-            }.inner;
 
             // Make our new userData and metaTable
             _ = luaState.newUserdata(T, @sizeOf(T));
@@ -60,8 +55,20 @@ pub fn Registry(comptime entries: []const BoundType) type {
             luaState.setField(-2, "__index");
 
             // GC func is required for memory management
-            luaState.pushClosure(zlua.wrap(gcFunc), 0);
-            luaState.setField(-2, "__gc");
+            // Wire GC up to our destroy function if found!
+            if (comptime hasDestroyFunc(T)) {
+                // Make our GC function to wire to _gc in lua
+                const gcFunc = struct {
+                    fn inner(L: *zlua.Lua) i32 {
+                        const ptr = L.checkUserdata(T, 1, metaTableName);
+                        ptr.destroy();
+                        return 0;
+                    }
+                }.inner;
+
+                luaState.pushClosure(zlua.wrap(gcFunc), 0);
+                luaState.setField(-2, "__gc");
+            }
 
             // Now wire up our functions!
             const foundFns = comptime findLibraryFunctions(T);
@@ -145,7 +152,7 @@ pub fn Registry(comptime entries: []const BoundType) type {
                                         args[i] = luaState.toString(lua_idx) catch "";
                                     },
                                     else => {
-                                        @compileError(std.fmt.comptimePrint("Unimplemented LUA argument type: {any}:{s} {any}", .{ i, @typeName(param_type), params }));
+                                        delve.debug.warning("Unimplemented LUA argument type! {s}", .{@typeName(param_type)});
                                     },
                                 }
                             },
