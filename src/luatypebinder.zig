@@ -131,30 +131,18 @@ pub fn Registry(comptime entries: []const BoundType) type {
                                 if (p.size == .one and isRegistered(Child)) {
                                     args[i] = luaState.checkUserdata(Child, lua_idx, getMetaTableName(Child));
                                 } else {
-                                    delve.debug.fatal("Could not find user data type for arg: {any}", .{Child});
+                                    // Not a registered type, fallback to the default toAny
+                                    args[i] = luaState.toAny(param_type, lua_idx) catch {
+                                        delve.debug.fatal("Could not convert type {any} to Lua arg", .{param_type});
+                                        return 0;
+                                    };
                                 }
                             },
                             else => {
-                                switch (param_type) {
-                                    bool => {
-                                        args[i] = luaState.toBool(lua_idx) catch false;
-                                    },
-                                    c_int, usize, i8, i16, i32, i64, u8, u16, u32, u64 => {
-                                        // ints
-                                        args[i] = std.math.lossyCast(param_type, luaState.toNumber(lua_idx) catch 0);
-                                    },
-                                    f16, f32, f64 => {
-                                        // floats
-                                        args[i] = std.math.lossyCast(param_type, luaState.toNumber(lua_idx) catch 0);
-                                    },
-                                    [*:0]const u8 => {
-                                        // strings
-                                        args[i] = luaState.toString(lua_idx) catch "";
-                                    },
-                                    else => {
-                                        delve.debug.warning("Unimplemented LUA argument type! {s}", .{@typeName(param_type)});
-                                    },
-                                }
+                                args[i] = luaState.toAny(param_type, lua_idx) catch {
+                                    delve.debug.fatal("Could not convert type {any} to Lua arg", .{param_type});
+                                    return 0;
+                                };
                             },
                         }
                     }
@@ -166,7 +154,7 @@ pub fn Registry(comptime entries: []const BoundType) type {
                     const ret_val = @call(.auto, function, args);
                     const ret_type = @TypeOf(ret_val);
 
-                    // handle registered types
+                    // handle registered auto-bound struct types
                     if (isRegistered(ret_type)) {
                         // make a new ptr
                         const ptr: *ret_type = @alignCast(luaState.newUserdata(ret_type, @sizeOf(ret_type)));
@@ -180,40 +168,18 @@ pub fn Registry(comptime entries: []const BoundType) type {
                         return 1;
                     }
 
-                    // everything else!
+                    // Push the return value onto the stack
+                    luaState.pushAny(ret_val) catch {
+                        return 0;
+                    };
+
+                    // Should either be one item, or none
                     switch (ret_type) {
                         void => {
                             return 0;
                         },
-                        bool => {
-                            luaState.pushBoolean(ret_val);
-                            return 1;
-                        },
-                        c_int, usize, i8, i16, i32, i64, u8, u16, u32, u64 => {
-                            luaState.pushNumber(@floatFromInt(ret_val));
-                            return 1;
-                        },
-                        f16, f32, f64 => {
-                            luaState.pushNumber(ret_val);
-                            return 1;
-                        },
-                        [*:0]const u8 => {
-                            _ = luaState.pushString(ret_val);
-                            return 1;
-                        },
-                        [:0]const u8 => {
-                            _ = luaState.pushString(ret_val);
-                            return 1;
-                        },
-                        std.meta.Tuple(&.{ f32, f32 }) => {
-                            // probably is a way to handle any tuple types
-                            luaState.pushNumber(ret_val[0]);
-                            luaState.pushNumber(ret_val[1]);
-                            return 2;
-                        },
                         else => {
-                            delve.debug.fatal("Could not find user data type to return: {s}", .{@typeName(ret_type)});
-                            return 0;
+                            return 1;
                         },
                     }
 
