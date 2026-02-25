@@ -8,6 +8,7 @@ const lua_module = delve.module.lua_simple;
 
 const zlua = @import("zlua");
 const Lua = zlua.Lua;
+const LuaComponent = @import("luacomponent.zig").LuaComponent;
 
 const luaTypeBinder = @import("luatypebinder.zig");
 
@@ -112,6 +113,11 @@ pub fn on_init() !void {
         .{ .T = MyTestStruct, .name = "MyTestStruct" },
         .{ .T = Title, .name = "Title" },
         .{ .T = delve.math.Vec3, .name = "Vec3" },
+        .{ .T = delve.math.Vec3, .name = "Vec4" },
+        .{ .T = delve.math.Vec3, .name = "Vec5" },
+        .{ .T = delve.math.Vec3, .name = "Vec6" },
+        .{ .T = delve.math.Vec3, .name = "Vec7" },
+        .{ .T = LuaComponent, .name = "LuaComponent" },
     });
 
     try luaTypeRegistry.bindTypes(lua_state);

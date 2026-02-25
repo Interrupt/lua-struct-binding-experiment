@@ -36,6 +36,14 @@ pub fn Registry(comptime entries: []const BoundType) type {
             return std.meta.hasFn(T, "destroy");
         }
 
+        pub fn hasIndexFunc(comptime T: type) bool {
+            return std.meta.hasFn(T, "__index");
+        }
+
+        pub fn hasNewIndexFunc(comptime T: type) bool {
+            return std.meta.hasFn(T, "__newindex");
+        }
+
         pub fn bindTypes(luaState: *zlua.Lua) !void {
             inline for (registry) |entry| {
                 try bindType(luaState, entry.T, entry.name);
@@ -44,15 +52,15 @@ pub fn Registry(comptime entries: []const BoundType) type {
 
         pub fn bindType(luaState: *zlua.Lua, comptime T: type, comptime metaTableName: [:0]const u8) !void {
             delve.debug.log("Registering user type: {s}", .{metaTableName});
+            const startTop = luaState.getTop();
+            delve.debug.log(" Lua top: {any}", .{startTop});
 
             // Make our new userData and metaTable
             _ = luaState.newUserdata(T, @sizeOf(T));
             _ = try luaState.newMetatable(metaTableName);
 
-            // Metatable.__index = metatable
-            // This lets us use 'obj:blah()' method call syntax
-            luaState.pushValue(-1);
-            luaState.setField(-2, "__index");
+            // luaState.pushValue(-1);
+            // luaState.setField(-2, "__index");
 
             // GC func is required for memory management
             // Wire GC up to our destroy function if found!
@@ -70,7 +78,42 @@ pub fn Registry(comptime entries: []const BoundType) type {
                 luaState.setField(-2, "__gc");
             }
 
+            delve.debug.log(" > Wiring Index Func", .{});
+            if (comptime hasIndexFunc(T)) {
+                // Wire to __index in lua
+                const indexFunc = struct {
+                    fn inner(L: *zlua.Lua) i32 {
+                        const ptr = L.checkUserdata(T, 1, metaTableName);
+                        return ptr.__index(L);
+                    }
+                }.inner;
+
+                luaState.pushClosure(zlua.wrap(indexFunc), 0);
+                luaState.setField(-2, "__index");
+            } else {
+                //If no index func was given, index to ourself
+                //Metatable.__index = metatable
+                //This lets us use 'obj:blah()' method call syntax
+                luaState.pushValue(-1);
+                luaState.setField(-2, "__index");
+            }
+
+            delve.debug.log(" > Wiring NewIndex Func", .{});
+            if (comptime hasNewIndexFunc(T)) {
+                // Wire to __newindex in lua
+                const newIndexFunc = struct {
+                    fn inner(L: *zlua.Lua) i32 {
+                        const ptr = L.checkUserdata(T, 1, metaTableName);
+                        return ptr.__newindex(L);
+                    }
+                }.inner;
+
+                luaState.pushClosure(zlua.wrap(newIndexFunc), 0);
+                luaState.setField(-2, "__newindex");
+            }
+
             // Now wire up our functions!
+            delve.debug.log(" > Wiring Library Funcs", .{});
             const foundFns = comptime findLibraryFunctions(T);
             inline for (foundFns) |foundFunc| {
                 luaState.pushClosure(foundFunc.func.?, 0);
@@ -78,9 +121,15 @@ pub fn Registry(comptime entries: []const BoundType) type {
             }
 
             // Make this usable with "require" and register our funcs in the library
+            delve.debug.log("Adding require table for: '{s}'", .{metaTableName});
+            delve.debug.log(" Lua top: {any}", .{luaState.getTop()});
             luaState.requireF(metaTableName, zlua.wrap(makeLuaOpenLibFn(foundFns)), true);
+            luaState.pop(3);
 
             delve.debug.log("Added lua module: '{s}'", .{metaTableName});
+            if (startTop != luaState.getTop()) {
+                delve.debug.fatal("Lua binding: leaking stack!", .{});
+            }
         }
 
         fn makeLuaBinding(name: [:0]const u8, comptime function: anytype) zlua.FnReg {
@@ -103,7 +152,10 @@ pub fn Registry(comptime entries: []const BoundType) type {
                 for (gen_fields) |d| {
                     // convert the name string to be :0 terminated
                     const field_name: [:0]const u8 = d.name ++ "";
-                    found = found ++ .{makeLuaBinding(field_name, @field(module, d.name))};
+
+                    if (field_name.len > 0 and field_name[0] != '_') {
+                        found = found ++ .{makeLuaBinding(field_name, @field(module, d.name))};
+                    }
 
                     // found = found ++ .{ .name = field_name, .func = zlua.wrap(@field(module, d.name)) };
                 }

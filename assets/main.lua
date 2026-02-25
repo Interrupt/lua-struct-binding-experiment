@@ -3,6 +3,7 @@ print("Hello from lua!")
 local text = require("text")
 local testUserdata = require("MyTestStruct")
 local titleType = require("Title")
+local luaComponent = require("LuaComponent")
 
 -- Exercise our test types!
 
@@ -44,7 +45,18 @@ objThree:add(objTwo)
 print(objOne:getVal())
 print(objThree:getVal())
 
+local comp = luaComponent.new("assets/test-component.lua")
+comp.test_string = "This is my test string! Wow"
+
 -- lifecycle funcs!
 function _draw()
 	text.draw(title:getTitle(), 40, 40, 7)
+
+	-- Also draw our test component
+	comp:_draw()
+end
+
+function _update()
+	-- Update our test component
+	comp:_update()
 end
