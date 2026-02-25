@@ -99,7 +99,7 @@ pub fn main() !void {
     try lua_module.registerModule("assets/main.lua");
 
     // Note: Delve Framework expects there to be an assets directory
-    try app.start(app.AppConfig{ .title = "Delve Framework Lua Example" });
+    try app.start(app.AppConfig{ .title = "Lua Binding Experiment" });
 }
 
 pub fn on_init() !void {
