@@ -51,16 +51,11 @@ pub fn Registry(comptime entries: []const BoundType) type {
         }
 
         pub fn bindType(luaState: *zlua.Lua, comptime T: type, comptime metaTableName: [:0]const u8) !void {
-            delve.debug.log("Registering user type: {s}", .{metaTableName});
             const startTop = luaState.getTop();
-            delve.debug.log(" Lua top: {any}", .{startTop});
 
             // Make our new userData and metaTable
             _ = luaState.newUserdata(T, @sizeOf(T));
             _ = try luaState.newMetatable(metaTableName);
-
-            // luaState.pushValue(-1);
-            // luaState.setField(-2, "__index");
 
             // GC func is required for memory management
             // Wire GC up to our destroy function if found!
@@ -78,7 +73,6 @@ pub fn Registry(comptime entries: []const BoundType) type {
                 luaState.setField(-2, "__gc");
             }
 
-            delve.debug.log(" > Wiring Index Func", .{});
             if (comptime hasIndexFunc(T)) {
                 // Wire to __index in lua
                 const indexFunc = struct {
@@ -98,7 +92,6 @@ pub fn Registry(comptime entries: []const BoundType) type {
                 luaState.setField(-2, "__index");
             }
 
-            delve.debug.log(" > Wiring NewIndex Func", .{});
             if (comptime hasNewIndexFunc(T)) {
                 // Wire to __newindex in lua
                 const newIndexFunc = struct {
@@ -113,7 +106,6 @@ pub fn Registry(comptime entries: []const BoundType) type {
             }
 
             // Now wire up our functions!
-            delve.debug.log(" > Wiring Library Funcs", .{});
             const foundFns = comptime findLibraryFunctions(T);
             inline for (foundFns) |foundFunc| {
                 luaState.pushClosure(foundFunc.func.?, 0);
@@ -121,12 +113,10 @@ pub fn Registry(comptime entries: []const BoundType) type {
             }
 
             // Make this usable with "require" and register our funcs in the library
-            delve.debug.log("Adding require table for: '{s}'", .{metaTableName});
-            delve.debug.log(" Lua top: {any}", .{luaState.getTop()});
             luaState.requireF(metaTableName, zlua.wrap(makeLuaOpenLibFn(foundFns)), true);
             luaState.pop(3);
 
-            delve.debug.log("Added lua module: '{s}'", .{metaTableName});
+            delve.debug.info("Added lua module: '{s}'", .{metaTableName});
             if (startTop != luaState.getTop()) {
                 delve.debug.fatal("Lua binding: leaking stack!", .{});
             }
@@ -258,8 +248,6 @@ fn makeFuncRg(funcs: []zlua.CFn) []zlua.FnReg {
 fn makeLuaOpenLibFn(libFuncs: []const zlua.FnReg) fn (*Lua) i32 {
     return opaque {
         pub fn inner(luaState: *Lua) i32 {
-            delve.debug.log("Lua require called!", .{});
-
             // Register our new library for this type, with all our funcs!
             luaState.newLib(libFuncs);
 

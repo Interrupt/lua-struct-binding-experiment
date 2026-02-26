@@ -12,7 +12,7 @@ componentTable._update = function(self)
 end
 
 componentTable._draw = function(self)
-	text.draw("This is from a component!", 50, 80, 7)
+	text.draw("This is from my component's draw function!", 50, 80, 7)
 	text.draw(self.test_string, self.text_loc + 50, 120, 7)
 end
 

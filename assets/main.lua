@@ -46,7 +46,10 @@ print(objOne:getVal())
 print(objThree:getVal())
 
 local comp = luaComponent.new("assets/test-component.lua")
-comp.test_string = "This is my test string! Wow"
+comp.test_string = "This is from my component state! Wow"
+
+-- run a bound function in our component
+comp:debugPrint()
 
 -- lifecycle funcs!
 function _draw()

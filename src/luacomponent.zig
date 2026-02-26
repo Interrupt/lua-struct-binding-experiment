@@ -89,6 +89,27 @@ pub const LuaComponent = struct {
         // return registry[scriptIndex][key]
         _ = luaState.getTable(-2);
 
+        if (!luaState.isNil(-1)) {
+            return 1;
+        }
+
+        // pop the nil value
+        luaState.pop(1);
+
+        // fallback to our own metatable so that we can still call bound functions like self:ourFunc()
+
+        // get our own metatable
+        luaState.getMetatable(1) catch {
+            delve.debug.log("LuaComponent __index could not get metatable!", .{});
+            return 0;
+        };
+
+        // push the key again
+        luaState.pushValue(2);
+
+        // return metatable[key]
+        _ = luaState.getTable(-2);
+
         return 1;
     }
 
@@ -137,15 +158,7 @@ pub const LuaComponent = struct {
         delve.debug.log("LuaComponent destroy!", .{});
     }
 
-    pub fn onInit(self: *LuaComponent) void {
-        _ = self;
-    }
-
-    pub fn onTick(self: *LuaComponent) void {
-        _ = self;
-    }
-
-    pub fn onDestroy(self: *LuaComponent) void {
-        _ = self;
+    pub fn debugPrint(self: *LuaComponent) void {
+        delve.debug.log("LuaComponent script='{s}'", .{self.script});
     }
 };
