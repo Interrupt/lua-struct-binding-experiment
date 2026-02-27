@@ -156,8 +156,16 @@ pub fn Registry(comptime entries: []const BoundType) type {
         fn bindStructFuncLua(comptime function: anytype) fn (lua: *Lua) i32 {
             return (opaque {
                 pub fn lua_call(luaState: *Lua) i32 {
+                    const FnType = @TypeOf(function);
+
+                    // Can't bind types with anytype, so early out if we see one!
+                    if (comptime hasAnytypeParam(FnType)) {
+                        delve.debug.warning("Cannot call bound function with anytype param", .{});
+                        return 0;
+                    }
+
                     // Get a tuple of the various types of the arguments, and then create one
-                    const ArgsTuple = std.meta.ArgsTuple(@TypeOf(function));
+                    const ArgsTuple = std.meta.ArgsTuple(FnType);
                     var args: ArgsTuple = undefined;
 
                     const fn_info = @typeInfo(@TypeOf(function)).@"fn";
@@ -193,7 +201,21 @@ pub fn Registry(comptime entries: []const BoundType) type {
                         @compileError("Function has no return type?! This should not be possible.");
                     }
 
-                    const ret_val = @call(.auto, function, args);
+                    const ReturnType = fn_info.return_type.?;
+
+                    // Handle both error union and non-error union function calls
+                    const ret_val = switch (@typeInfo(ReturnType)) {
+                        .error_union => |_| blk: {
+                            const val = @call(.auto, function, args) catch |err| {
+                                delve.debug.warning("Error returned from bound Lua function: {any}", .{err});
+                                return 0;
+                            };
+
+                            break :blk val;
+                        },
+                        else => @call(.auto, function, args),
+                    };
+
                     const ret_type = @TypeOf(ret_val);
 
                     // handle registered auto-bound struct types
@@ -211,7 +233,8 @@ pub fn Registry(comptime entries: []const BoundType) type {
                     }
 
                     // Push the return value onto the stack
-                    luaState.pushAny(ret_val) catch {
+                    luaState.pushAny(ret_val) catch |err| {
+                        delve.debug.fatal("Error pushing value onto Lua stack! {any}", .{err});
                         return 0;
                     };
 
@@ -230,6 +253,23 @@ pub fn Registry(comptime entries: []const BoundType) type {
             }).lua_call;
         }
     };
+}
+
+pub fn isErrorUnionType(comptime T: type) bool {
+    return switch (@typeInfo(T)) {
+        .error_union => true,
+        else => false,
+    };
+}
+
+fn hasAnytypeParam(comptime T: type) bool {
+    const fn_info = @typeInfo(T).@"fn";
+
+    inline for (fn_info.params) |p| {
+        if (p.type == null) return true;
+        if (@hasField(@TypeOf(p), "is_generic") and p.is_generic) return true;
+    }
+    return false;
 }
 
 fn makeFuncRg(funcs: []zlua.CFn) []zlua.FnReg {

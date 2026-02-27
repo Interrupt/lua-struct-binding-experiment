@@ -1,4 +1,5 @@
 local text = require("text")
+local app = require("App")
 
 -- print("New component script running!")
 
@@ -7,7 +8,8 @@ local componentTable = {}
 local time = 0.0
 
 componentTable._update = function(self)
-	time = time + 0.1
+	local dt = app.getCurrentDeltaTime()
+	time = time + (10.0 * dt)
 	self.text_loc = math.sin(time + 2.0) * 20
 end
 

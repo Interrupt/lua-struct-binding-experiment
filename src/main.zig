@@ -112,26 +112,16 @@ pub fn on_init() !void {
     const luaTypeRegistry = luaTypeBinder.Registry(&[_]luaTypeBinder.BoundType{
         .{ .T = MyTestStruct, .name = "MyTestStruct" },
         .{ .T = Title, .name = "Title" },
-        .{ .T = delve.math.Vec3, .name = "Vec3" },
-        .{ .T = delve.math.Vec3, .name = "Vec4" },
-        .{ .T = delve.math.Vec3, .name = "Vec5" },
-        .{ .T = delve.math.Vec3, .name = "Vec6" },
-        .{ .T = delve.math.Vec3, .name = "Vec7" },
         .{ .T = LuaComponent, .name = "LuaComponent" },
+        .{ .T = delve.math.Vec3, .name = "Vec3" },
+        .{ .T = delve.math.Mat4, .name = "Mat4" },
+        .{ .T = delve.colors.Color, .name = "Color" },
+        .{ .T = delve.fonts, .name = "Fonts" },
+        .{ .T = delve.platform.app, .name = "App" },
+        .{ .T = delve.platform.input, .name = "Input" },
     });
 
     try luaTypeRegistry.bindTypes(lua_state);
-
-    // Manually run the lua file
-    // lua_state.doFile("assets/main.lua") catch |err| {
-    //     const lua_error = lua_state.toString(-1) catch {
-    //         delve.debug.log("Lua: could not get error string", .{});
-    //         return err;
-    //     };
-    //
-    //     delve.debug.log("Lua: error running file! {s}", .{lua_error});
-    //     return err;
-    // };
 }
 
 pub fn on_draw() void {
